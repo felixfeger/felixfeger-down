@@ -370,6 +370,20 @@ main { flex: 1; display: flex; flex-direction: column; }
   .fact { flex-direction: column; gap: 2px; }
   .fact dd { text-align: left; }
 }
+
+/* Added for the "nothing posted" state */
+[hidden] { display: none !important; }
+
+.status-dot.ok { background: var(--teal); }
+
+.detail-list {
+  margin: 0 0 14px;
+  padding-left: 1.1em;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+}
+
+.detail-list li { margin-bottom: 2px; }
 </style>
 </head>
 <body>
@@ -392,13 +406,15 @@ main { flex: 1; display: flex; flex-direction: column; }
             stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
     </svg>
 
-    <div class="status"><span class="status-dot" id="status-dot"></span><span id="status-text">Scheduled maintenance</span></div>
+    <!-- Nothing here claims anything is down. js/status.js switches this to a
+         maintenance or incident message only when one is posted there. -->
+    <div class="status"><span class="status-dot ok" id="status-dot"></span><span id="status-text">No known issues</span></div>
 
-    <h1 id="page-title">Down for Maintenance</h1>
-    <p class="tagline" id="page-tagline">We're making a few updates to the site and will be back soon.</p>
+    <h1 id="page-title">No Maintenance Scheduled</h1>
+    <p class="tagline" id="page-tagline">We aren't aware of any maintenance or outages right now. If something isn't working for you, contact us with the details and we'll investigate.</p>
     <div class="hero-actions">
-      <a href="mailto:hello@felixfeger.com" class="btn">Contact Me</a>
-      <a href="javascript:location.reload()" class="btn btn-quiet">Try Again</a>
+      <a href="mailto:hello@felixfeger.com?subject=Possible%20issue%20on%20felixfeger.com&body=Hi%2C%0A%0AI%20think%20something%20isn%27t%20working.%20Here%20are%20the%20details%3A%0A%0AWhat%20I%20was%20trying%20to%20do%3A%0A%0APage%20or%20service%3A%0A%0AWhat%20happened%3A%0A%0AWhen%20it%20started%3A%0A%0ADevice%20and%20browser%3A%0A" class="btn">Contact Us</a>
+      <a href="status.html" class="btn btn-quiet" id="secondary-btn" hidden>View Status</a>
     </div>
   </section>
 
@@ -414,25 +430,30 @@ main { flex: 1; display: flex; flex-direction: column; }
     <div class="wrap">
       <!-- Filled in from js/status.js. Add or edit maintenance windows there. -->
       <div data-status-feed data-show="maintenance" data-history="false"
-           data-empty-maintenance="No maintenance window has been posted yet. Check back soon.">
+           data-empty-maintenance="We aren't aware of any maintenance right now.">
         <p class="sf-fallback">Loading maintenance details&hellip;</p>
       </div>
 
       <div class="card-grid">
         <div class="card">
-          <h3>What's happening</h3>
-          <p>The site is temporarily offline while updates are made behind the scenes. Pages may be unavailable until the work is finished.</p>
+          <h3 id="c1-title">Status</h3>
+          <p id="c1-text">We aren't aware of any maintenance or outages at the moment.</p>
         </div>
 
         <div class="card">
-          <h3>What to do</h3>
-          <p>Nothing on your end. Check back in a little while, or use the Try Again button to reload the page.</p>
+          <h3 id="c2-title">Having trouble?</h3>
+          <p id="c2-text">If something isn't working for you, send us the details and we'll investigate.</p>
         </div>
 
         <div class="card">
-          <h3>Need something?</h3>
-          <p>If it can't wait, send me an email and I'll get back to you.</p>
-          <a href="mailto:hello@felixfeger.com">hello@felixfeger.com</a>
+          <h3>Report a problem</h3>
+          <p>Email us with as much detail as you can and we'll investigate. It helps to include:</p>
+          <ul class="detail-list">
+            <li>What you were trying to do</li>
+            <li>The page or service</li>
+            <li>What happened, and when</li>
+          </ul>
+          <a href="mailto:hello@felixfeger.com?subject=Possible%20issue%20on%20felixfeger.com&body=Hi%2C%0A%0AI%20think%20something%20isn%27t%20working.%20Here%20are%20the%20details%3A%0A%0AWhat%20I%20was%20trying%20to%20do%3A%0A%0APage%20or%20service%3A%0A%0AWhat%20happened%3A%0A%0AWhen%20it%20started%3A%0A%0ADevice%20and%20browser%3A%0A">hello@felixfeger.com</a>
         </div>
       </div>
     </div>
@@ -446,45 +467,80 @@ main { flex: 1; display: flex; flex-direction: column; }
 </footer>
 <script src="js/status.js"></script>
 <script>
-// Fill in the headline from js/status.js. If that file doesn't load, or no
-// maintenance is posted, the text already on the page stays as it is.
+// Fill in the page from js/status.js. Until a maintenance window is posted
+// there, the page says we aren't aware of any maintenance or outages, and it
+// never claims anything is down. If status.js doesn't load, that neutral text
+// stays.
 (function () {
   if (!window.SiteStatus) return;
 
-  var dot = document.getElementById('status-dot');
-  var pill = document.getElementById('status-text');
-  var title = document.getElementById('page-title');
-  var tagline = document.getElementById('page-tagline');
-  var fallback = {
-    pill: pill.textContent,
-    title: title.textContent,
-    tagline: tagline.textContent
+  var $ = function (id) { return document.getElementById(id); };
+  var dot = $('status-dot'), pill = $('status-text'), title = $('page-title');
+  var tagline = $('page-tagline'), secondary = $('secondary-btn');
+  var c1t = $('c1-title'), c1 = $('c1-text'), c2t = $('c2-title'), c2 = $('c2-text');
+
+  var neutral = {
+    pill: pill.textContent, title: title.textContent, tagline: tagline.textContent,
+    c1t: c1t.textContent, c1: c1.textContent, c2t: c2t.textContent, c2: c2.textContent
   };
+
+  function tone(kind) {
+    dot.classList.toggle('ok', kind === 'ok');
+    dot.classList.toggle('pulse', kind === 'warn');
+  }
+
+  function button(label, href) {
+    if (!label) { secondary.hidden = true; return; }
+    secondary.textContent = label;
+    secondary.setAttribute('href', href);
+    secondary.hidden = false;
+  }
 
   SiteStatus.subscribe(function () {
     var m = SiteStatus.currentMaintenance();
+    var inc = SiteStatus.activeIncident();
 
     if (!m) {
-      pill.textContent = fallback.pill;
-      title.textContent = fallback.title;
-      tagline.textContent = fallback.tagline;
-      dot.classList.remove('pulse');
+      pill.textContent = neutral.pill;
+      title.textContent = neutral.title;
+      tagline.textContent = inc
+        ? "We aren't aware of any maintenance right now, but there is an active incident."
+        : neutral.tagline;
+      c1t.textContent = neutral.c1t;
+      c1.textContent = inc
+        ? "We aren't aware of any maintenance at the moment."
+        : neutral.c1;
+      c2t.textContent = neutral.c2t;
+      c2.textContent = neutral.c2;
+      tone(inc ? 'warn' : 'ok');
+      if (inc) pill.textContent = 'Active incident';
+      button(inc ? 'View Status' : '', 'status.html');
       return;
     }
 
     if (m.status === 'in-progress') {
       pill.textContent = 'Maintenance in progress';
-      title.textContent = fallback.title;
+      title.textContent = 'Down for Maintenance';
       var name = m.item.title ? 'Currently underway: ' + m.item.title.replace(/[.!?]+$/, '') + '. ' : '';
       tagline.textContent = name + (m.endText
         ? 'We expect to be back by ' + m.endText + '.'
         : "We'll be back soon.");
-      dot.classList.add('pulse');
+      c1t.textContent = "What's happening";
+      c1.textContent = 'Maintenance is underway. Some pages or features may be unavailable until the work is finished.';
+      c2t.textContent = 'What to do';
+      c2.textContent = 'Nothing on your end. Check back in a little while, or use the Try Again button to reload the page.';
+      tone('warn');
+      button('Try Again', 'javascript:location.reload()');
     } else {
       pill.textContent = 'Scheduled maintenance';
       title.textContent = 'Maintenance Scheduled';
       tagline.textContent = 'Maintenance is scheduled for ' + m.rangeText + '.';
-      dot.classList.remove('pulse');
+      c1t.textContent = "What's planned";
+      c1.textContent = 'Some pages or features may be unavailable during that time.';
+      c2t.textContent = 'What to do';
+      c2.textContent = 'Nothing on your end. Plan around the window above and check back once it ends.';
+      tone('info');
+      button('', '');
     }
   });
 })();
