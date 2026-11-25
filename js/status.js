@@ -1,0 +1,491 @@
+// js/status.js
+//
+// Standalone status feed. Edit the two lists in the DATA section below to
+// add, change or remove incidents and maintenance windows. Nothing else in
+// this file needs to change.
+//
+// To show the feed on any page:
+//
+//   <div data-status-feed></div>
+//   <script src="js/status.js"></script>
+//
+// Optional attributes on that div:
+//
+//   data-show="all"          everything (default)
+//   data-show="incidents"    only incidents
+//   data-show="maintenance"  only maintenance
+//   data-history="false"     hide the "Past events" section
+//
+// When there is nothing to show, the feed says so ("No active incidents.",
+// "No scheduled maintenance.", and so on).
+//
+// Maintenance status is worked out from the start and end times, so a
+// window moves from Scheduled to In progress to Completed on its own.
+// Incidents are updated by hand (see the template below).
+
+
+(function () {
+  "use strict";
+
+  // =====================================================================
+  //  SETTINGS
+  // =====================================================================
+
+  var SETTINGS = {
+    // Times in the feed are shown in this time zone.
+    timeZone: "America/Los_Angeles",
+
+    // Show resolved incidents and completed maintenance for a while.
+    showHistory: true,
+    historyDays: 30
+  };
+
+
+  // =====================================================================
+  //  DATA
+  // =====================================================================
+
+  // ---- Incidents ------------------------------------------------------
+  //
+  // Copy the template, fill it in, and add it to the list (newest first
+  // is easiest, but the order doesn't matter).
+  //
+  //   {
+  //     id: "2026-12-01-login",              // anything unique
+  //     title: "Sign-in is unavailable",
+  //     status: "investigating",             // investigating | identified
+  //                                          //   | monitoring | resolved
+  //     started: "2026-12-01T09:15:00-08:00",
+  //     resolved: "2026-12-01T11:40:00-08:00",   // only when resolved
+  //     affected: "Sign-in",                 // optional
+  //     description: "Some visitors can't sign in.",   // optional
+  //     updates: [                           // optional, any order
+  //       { time: "2026-12-01T09:40:00-08:00",
+  //         status: "identified",
+  //         message: "We found the cause and are working on a fix." }
+  //     ]
+  //   }
+  //
+  // Times are written like 2026-12-01T09:15:00-08:00
+  // (date, T, 24-hour time, then the offset: -08:00 for PST, -07:00 for PDT).
+  //
+  // If you leave out "status", the status of the latest update is used.
+  // To resolve an incident, set status to "resolved" and add "resolved".
+
+  var INCIDENTS = [
+    // (none)
+  ];
+
+
+  // ---- Maintenance ----------------------------------------------------
+  //
+  //   {
+  //     id: "2026-12-05-update",
+  //     title: "Website updates",
+  //     start: "2026-12-05T22:00:00-08:00",
+  //     end:   "2026-12-06T00:00:00-08:00",
+  //     affected: "felixfeger.com",          // optional
+  //     description: "The site will be offline briefly."   // optional
+  //   }
+  //
+  // Optional: set status to "scheduled", "in-progress" or "completed" to
+  // override the automatic status (for example, to finish a window early).
+
+  var MAINTENANCES = [
+    // (none)
+  ];
+
+
+  // =====================================================================
+  //  LABELS
+  // =====================================================================
+
+  var LABELS = {
+    investigating: "Investigating",
+    identified: "Identified",
+    monitoring: "Monitoring",
+    resolved: "Resolved",
+    scheduled: "Scheduled",
+    "in-progress": "In progress",
+    completed: "Completed"
+  };
+
+
+  // =====================================================================
+  //  EVERYTHING BELOW RENDERS THE FEED. NO NEED TO EDIT.
+  // =====================================================================
+
+  var DAY = 24 * 60 * 60 * 1000;
+
+  // ---- Styles (injected once; uses the site's colors when present) ------
+
+  var CSS = [
+    ".sf { max-width: 720px; margin: 0 auto; font-family: var(--font-body, 'Inter', sans-serif); color: var(--ink, #3A362C); }",
+    ".sf *, .sf *::before, .sf *::after { box-sizing: border-box; }",
+
+    ".sf-banner { display: flex; align-items: center; gap: 14px; border: 1px solid var(--line, #D9D0BA); background: var(--bg, #F5F1E8); padding: 18px 22px; margin-bottom: 36px; }",
+    ".sf-banner h2 { font-family: var(--font-display, 'Quicksand', sans-serif); font-size: 1.15rem; margin: 0; line-height: 1.2; color: var(--ink, #3A362C); }",
+    ".sf-banner p { margin: 2px 0 0; font-size: 0.92rem; color: var(--ink-soft, #6B6355); max-width: none; }",
+
+    ".sf-dot { flex: none; width: 12px; height: 12px; border-radius: 50%; background: var(--teal, #3E6B6B); }",
+    ".sf-dot[data-tone='warn'] { background: var(--amber, #C9932E); animation: sf-pulse 2s ease-in-out infinite; }",
+    ".sf-dot[data-tone='info'] { background: var(--amber, #C9932E); }",
+    ".sf-dot[data-tone='quiet'] { background: var(--line, #D9D0BA); border: 2px solid var(--ink-soft, #6B6355); }",
+    "@keyframes sf-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }",
+    "@media (prefers-reduced-motion: reduce) { .sf-dot[data-tone='warn'] { animation: none; } }",
+
+    ".sf-section { margin-bottom: 36px; }",
+    ".sf-heading { font-family: var(--font-display, 'Quicksand', sans-serif); font-weight: 700; font-size: 0.85rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-soft, #6B6355); margin: 0 0 12px; }",
+
+    ".sf-empty { border: 1px dashed var(--line, #D9D0BA); padding: 18px 22px; color: var(--ink-soft, #6B6355); font-size: 0.95rem; margin: 0; max-width: none; }",
+
+    ".sf-card { border: 1px solid var(--line, #D9D0BA); background: var(--bg, #F5F1E8); padding: 20px 22px; margin-bottom: 14px; }",
+    ".sf-card[data-tone='warn'] { border-left: 4px solid var(--amber, #C9932E); }",
+    ".sf-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }",
+    ".sf-card h3 { font-family: var(--font-display, 'Quicksand', sans-serif); font-size: 1.1rem; margin: 0; line-height: 1.25; color: var(--ink, #3A362C); }",
+
+    ".sf-pill { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line, #D9D0BA); background: var(--bg-raised, #ECE5D3); border-radius: 999px; padding: 2px 12px; font-family: var(--font-display, 'Quicksand', sans-serif); font-weight: 600; font-size: 0.8rem; white-space: nowrap; }",
+    ".sf-pill .sf-dot { width: 8px; height: 8px; animation: none; border-width: 1.5px; }",
+
+    ".sf-meta { margin: 8px 0 0; font-size: 0.88rem; color: var(--ink-soft, #6B6355); max-width: none; }",
+    ".sf-desc { margin: 10px 0 0; font-size: 0.95rem; color: var(--ink, #3A362C); max-width: 62ch; }",
+
+    ".sf-updates { list-style: none; margin: 16px 0 0; padding: 14px 0 0; border-top: 1px solid var(--line, #D9D0BA); }",
+    ".sf-update { margin: 0 0 12px; font-size: 0.92rem; }",
+    ".sf-update:last-child { margin-bottom: 0; }",
+    ".sf-update strong { font-family: var(--font-display, 'Quicksand', sans-serif); }",
+    ".sf-update time { display: block; font-size: 0.82rem; color: var(--ink-soft, #6B6355); }",
+    ".sf-update p { margin: 2px 0 0; color: var(--ink, #3A362C); max-width: 62ch; }"
+  ].join("\n");
+
+  function injectStyles() {
+    if (document.getElementById("sf-styles")) return;
+    var style = document.createElement("style");
+    style.id = "sf-styles";
+    style.textContent = CSS;
+    document.head.appendChild(style);
+  }
+
+
+  // ---- Small helpers --------------------------------------------------
+
+  function h(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined && text !== null) node.textContent = text;
+    return node;
+  }
+
+  function time(value) {
+    var t = new Date(value).getTime();
+    return isNaN(t) ? null : t;
+  }
+
+  function fmtDateTime(value) {
+    var t = time(value);
+    if (t === null) return String(value || "");
+    try {
+      return new Intl.DateTimeFormat("en-US", {
+        month: "short", day: "numeric", year: "numeric",
+        hour: "numeric", minute: "2-digit", timeZoneName: "short",
+        timeZone: SETTINGS.timeZone
+      }).format(new Date(t));
+    } catch (e) {
+      return new Date(t).toLocaleString();
+    }
+  }
+
+  function fmtTimeOnly(value) {
+    var t = time(value);
+    if (t === null) return String(value || "");
+    try {
+      return new Intl.DateTimeFormat("en-US", {
+        hour: "numeric", minute: "2-digit", timeZoneName: "short",
+        timeZone: SETTINGS.timeZone
+      }).format(new Date(t));
+    } catch (e) {
+      return new Date(t).toLocaleTimeString();
+    }
+  }
+
+  function dayKey(value) {
+    var t = time(value);
+    if (t === null) return "";
+    try {
+      return new Intl.DateTimeFormat("en-US", {
+        year: "numeric", month: "numeric", day: "numeric",
+        timeZone: SETTINGS.timeZone
+      }).format(new Date(t));
+    } catch (e) {
+      return new Date(t).toDateString();
+    }
+  }
+
+  function fmtRange(start, end) {
+    if (!end) return fmtDateTime(start);
+    if (dayKey(start) === dayKey(end)) {
+      return fmtDateTime(start) + " to " + fmtTimeOnly(end);
+    }
+    return fmtDateTime(start) + " to " + fmtDateTime(end);
+  }
+
+
+  // ---- Working out status ---------------------------------------------
+
+  function latestUpdate(incident) {
+    var list = incident.updates || [];
+    var best = null;
+    for (var i = 0; i < list.length; i++) {
+      if (!best || (time(list[i].time) || 0) > (time(best.time) || 0)) best = list[i];
+    }
+    return best;
+  }
+
+  function incidentStatus(incident) {
+    if (incident.status) return incident.status;
+    var last = latestUpdate(incident);
+    return (last && last.status) || "investigating";
+  }
+
+  function incidentEnd(incident) {
+    if (incident.resolved) return time(incident.resolved);
+    var last = latestUpdate(incident);
+    return (last && time(last.time)) || time(incident.started) || 0;
+  }
+
+  function maintenanceStatus(m, now) {
+    if (m.status) return m.status;
+    var start = time(m.start);
+    var end = time(m.end);
+    if (start !== null && now < start) return "scheduled";
+    if (end !== null && now > end) return "completed";
+    return start === null ? "scheduled" : "in-progress";
+  }
+
+  function toneFor(status) {
+    if (status === "resolved" || status === "completed") return "ok";
+    if (status === "scheduled") return "quiet";
+    if (status === "in-progress") return "info";
+    return "warn";
+  }
+
+
+  // ---- Building the pieces --------------------------------------------
+
+  function pill(status) {
+    var p = h("span", "sf-pill");
+    var d = h("span", "sf-dot");
+    d.setAttribute("data-tone", toneFor(status));
+    p.appendChild(d);
+    p.appendChild(document.createTextNode(LABELS[status] || status));
+    return p;
+  }
+
+  function incidentCard(incident, status) {
+    var card = h("article", "sf-card");
+    card.setAttribute("data-tone", toneFor(status) === "warn" ? "warn" : "");
+
+    var top = h("div", "sf-card-top");
+    top.appendChild(h("h3", "", incident.title || "Incident"));
+    top.appendChild(pill(status));
+    card.appendChild(top);
+
+    var meta = "Started " + fmtDateTime(incident.started);
+    if (status === "resolved" && incidentEnd(incident)) {
+      meta += " \u00B7 Resolved " + fmtDateTime(new Date(incidentEnd(incident)).toISOString());
+    }
+    if (incident.affected) meta += " \u00B7 Affected: " + incident.affected;
+    card.appendChild(h("p", "sf-meta", meta));
+
+    if (incident.description) card.appendChild(h("p", "sf-desc", incident.description));
+
+    var updates = (incident.updates || []).slice().sort(function (a, b) {
+      return (time(b.time) || 0) - (time(a.time) || 0);
+    });
+    if (updates.length) {
+      var list = h("ol", "sf-updates");
+      updates.forEach(function (u) {
+        var li = h("li", "sf-update");
+        li.appendChild(h("strong", "", LABELS[u.status] || u.status || "Update"));
+        li.appendChild(h("time", "", fmtDateTime(u.time)));
+        if (u.message) li.appendChild(h("p", "", u.message));
+        list.appendChild(li);
+      });
+      card.appendChild(list);
+    }
+    return card;
+  }
+
+  function maintenanceCard(m, status) {
+    var card = h("article", "sf-card");
+    card.setAttribute("data-tone", status === "in-progress" ? "warn" : "");
+
+    var top = h("div", "sf-card-top");
+    top.appendChild(h("h3", "", m.title || "Maintenance"));
+    top.appendChild(pill(status));
+    card.appendChild(top);
+
+    var meta = fmtRange(m.start, m.end);
+    if (m.affected) meta += " \u00B7 Affected: " + m.affected;
+    card.appendChild(h("p", "sf-meta", meta));
+
+    if (m.description) card.appendChild(h("p", "sf-desc", m.description));
+    return card;
+  }
+
+  function section(title) {
+    var s = h("section", "sf-section");
+    s.appendChild(h("h2", "sf-heading", title));
+    return s;
+  }
+
+  function empty(text) {
+    return h("p", "sf-empty", text);
+  }
+
+  function banner(activeIncidents, runningMaint, upcomingMaint) {
+    var box = h("div", "sf-banner");
+    var dot = h("span", "sf-dot");
+    var title, sub;
+
+    if (activeIncidents.length) {
+      dot.setAttribute("data-tone", "warn");
+      title = activeIncidents.length === 1 ? "Active incident" : activeIncidents.length + " active incidents";
+      sub = "We're working to resolve it. Details below.";
+    } else if (runningMaint.length) {
+      dot.setAttribute("data-tone", "info");
+      title = "Maintenance in progress";
+      sub = "Some things may be unavailable for a short time.";
+    } else {
+      title = "All systems operational";
+      sub = upcomingMaint.length
+        ? "Maintenance is scheduled. Details below."
+        : "No active incidents or scheduled maintenance.";
+    }
+
+    var text = h("div");
+    text.appendChild(h("h2", "", title));
+    text.appendChild(h("p", "", sub));
+    box.appendChild(dot);
+    box.appendChild(text);
+    return box;
+  }
+
+
+  // ---- Putting it together --------------------------------------------
+
+  function render(container) {
+    var now = Date.now();
+    var show = (container.getAttribute("data-show") || "all").toLowerCase();
+    var wantHistory = container.getAttribute("data-history") !== "false" && SETTINGS.showHistory;
+    var wantIncidents = show === "all" || show === "incidents";
+    var wantMaint = show === "all" || show === "maintenance";
+
+    // Sort everything into active and past.
+    var activeIncidents = [], pastIncidents = [];
+    INCIDENTS.forEach(function (i) {
+      var s = incidentStatus(i);
+      (s === "resolved" ? pastIncidents : activeIncidents).push({ item: i, status: s });
+    });
+    activeIncidents.sort(function (a, b) {
+      return (time(b.item.started) || 0) - (time(a.item.started) || 0);
+    });
+
+    var upcomingMaint = [], runningMaint = [], pastMaint = [];
+    MAINTENANCES.forEach(function (m) {
+      var s = maintenanceStatus(m, now);
+      var entry = { item: m, status: s };
+      if (s === "completed") pastMaint.push(entry);
+      else if (s === "in-progress") runningMaint.push(entry);
+      else upcomingMaint.push(entry);
+    });
+    upcomingMaint.sort(function (a, b) {
+      return (time(a.item.start) || 0) - (time(b.item.start) || 0);
+    });
+
+    var cutoff = now - SETTINGS.historyDays * DAY;
+    var history = [];
+    pastIncidents.forEach(function (e) {
+      if (incidentEnd(e.item) >= cutoff) history.push({ kind: "incident", when: incidentEnd(e.item), entry: e });
+    });
+    pastMaint.forEach(function (e) {
+      var end = time(e.item.end) || time(e.item.start) || 0;
+      if (end >= cutoff) history.push({ kind: "maintenance", when: end, entry: e });
+    });
+    history.sort(function (a, b) { return b.when - a.when; });
+
+    // Build the feed.
+    var root = h("div", "sf");
+
+    if (show === "all") {
+      root.appendChild(banner(
+        activeIncidents, runningMaint, upcomingMaint
+      ));
+    }
+
+    if (wantIncidents) {
+      var incSection = section("Incidents");
+      if (activeIncidents.length) {
+        activeIncidents.forEach(function (e) {
+          incSection.appendChild(incidentCard(e.item, e.status));
+        });
+      } else {
+        incSection.appendChild(empty("No active incidents."));
+      }
+      root.appendChild(incSection);
+    }
+
+    if (wantMaint) {
+      var mSection = section("Maintenance");
+      var activeMaint = runningMaint.concat(upcomingMaint);
+      if (activeMaint.length) {
+        activeMaint.forEach(function (e) {
+          mSection.appendChild(maintenanceCard(e.item, e.status));
+        });
+      } else {
+        mSection.appendChild(empty("No scheduled maintenance."));
+      }
+      root.appendChild(mSection);
+    }
+
+    if (wantHistory) {
+      var shown = history.filter(function (e) {
+        return (e.kind === "incident" && wantIncidents) || (e.kind === "maintenance" && wantMaint);
+      });
+      var hSection = section("Past events (last " + SETTINGS.historyDays + " days)");
+      if (shown.length) {
+        shown.forEach(function (e) {
+          hSection.appendChild(
+            e.kind === "incident"
+              ? incidentCard(e.entry.item, e.entry.status)
+              : maintenanceCard(e.entry.item, e.entry.status)
+          );
+        });
+      } else {
+        hSection.appendChild(empty("No past incidents or maintenance in the last " + SETTINGS.historyDays + " days."));
+      }
+      root.appendChild(hSection);
+    }
+
+    container.textContent = "";
+    container.appendChild(root);
+  }
+
+  function renderAll() {
+    var containers = document.querySelectorAll("[data-status-feed]");
+    for (var i = 0; i < containers.length; i++) render(containers[i]);
+  }
+
+  function start() {
+    injectStyles();
+    renderAll();
+    // Re-check once a minute so maintenance windows change status on their own.
+    setInterval(renderAll, 60 * 1000);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start);
+  } else {
+    start();
+  }
+})();
