@@ -12,7 +12,7 @@
 /* Standalone on purpose: no dependency on css/style.css or js/site.js,
    so this page still works if the rest of the site is unavailable.
    Colors, fonts and components are copied from css/style.css.
-   Only needs logo.png and favicon.ico from the site root. */
+   The logo loads from felixfeger.com/logo.png. Status details come from js/status.js. */
 
 @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');
 
@@ -361,6 +361,8 @@ main { flex: 1; display: flex; flex-direction: column; }
 
 .site-footer a { color: var(--ink-soft); text-decoration: underline; }
 
+.sf-fallback { text-align: center; color: var(--ink-soft); margin: 0 auto 36px; }
+
 @media (max-width: 720px) {
   .hero { padding: 64px 24px 48px; }
   .card-grid { grid-template-columns: 1fr; }
@@ -374,7 +376,7 @@ main { flex: 1; display: flex; flex-direction: column; }
 
 <header class="site-header">
   <div class="wrap">
-    <img class="brand-logo" src="logo.png" alt="Office of Felix Feger">
+    <img class="brand-logo" src="https://felixfeger.com/logo.png" alt="Office of Felix Feger">
   </div>
 </header>
 
@@ -390,10 +392,10 @@ main { flex: 1; display: flex; flex-direction: column; }
             stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
     </svg>
 
-    <div class="status"><span class="status-dot"></span>Scheduled maintenance</div>
+    <div class="status"><span class="status-dot" id="status-dot"></span><span id="status-text">Scheduled maintenance</span></div>
 
-    <h1>Down for Maintenance</h1>
-    <p class="tagline">We're making a few updates to the site and will be back soon.</p>
+    <h1 id="page-title">Down for Maintenance</h1>
+    <p class="tagline" id="page-tagline">We're making a few updates to the site and will be back soon.</p>
     <div class="hero-actions">
       <a href="mailto:hello@felixfeger.com" class="btn">Contact Me</a>
       <a href="javascript:location.reload()" class="btn btn-quiet">Try Again</a>
@@ -410,14 +412,11 @@ main { flex: 1; display: flex; flex-direction: column; }
 
   <section class="details">
     <div class="wrap">
-      <p class="section-label">Maintenance details</p>
-
-      <!-- Edit these values for each maintenance window. -->
-      <dl class="facts">
-        <div class="fact"><dt>Status</dt><dd>Maintenance in progress</dd></div>
-        <div class="fact"><dt>Affected</dt><dd>felixfeger.com</dd></div>
-        <div class="fact"><dt>Expected return</dt><dd>Shortly</dd></div>
-      </dl>
+      <!-- Filled in from js/status.js. Add or edit maintenance windows there. -->
+      <div data-status-feed data-show="maintenance" data-history="false"
+           data-empty-maintenance="No maintenance window has been posted yet. Check back soon.">
+        <p class="sf-fallback">Loading maintenance details&hellip;</p>
+      </div>
 
       <div class="card-grid">
         <div class="card">
@@ -442,8 +441,54 @@ main { flex: 1; display: flex; flex-direction: column; }
 
 <footer class="site-footer">
   &copy; <span id="year">2026</span> Felix Feger &middot;
-  <a href="mailto:hello@felixfeger.com">hello@felixfeger.com</a>
+  <a href="mailto:hello@felixfeger.com">hello@felixfeger.com</a> &middot;
+  <a href="status.html">Status</a>
 </footer>
+<script src="js/status.js"></script>
+<script>
+// Fill in the headline from js/status.js. If that file doesn't load, or no
+// maintenance is posted, the text already on the page stays as it is.
+(function () {
+  if (!window.SiteStatus) return;
+
+  var dot = document.getElementById('status-dot');
+  var pill = document.getElementById('status-text');
+  var title = document.getElementById('page-title');
+  var tagline = document.getElementById('page-tagline');
+  var fallback = {
+    pill: pill.textContent,
+    title: title.textContent,
+    tagline: tagline.textContent
+  };
+
+  SiteStatus.subscribe(function () {
+    var m = SiteStatus.currentMaintenance();
+
+    if (!m) {
+      pill.textContent = fallback.pill;
+      title.textContent = fallback.title;
+      tagline.textContent = fallback.tagline;
+      dot.classList.remove('pulse');
+      return;
+    }
+
+    if (m.status === 'in-progress') {
+      pill.textContent = 'Maintenance in progress';
+      title.textContent = fallback.title;
+      var name = m.item.title ? 'Currently underway: ' + m.item.title.replace(/[.!?]+$/, '') + '. ' : '';
+      tagline.textContent = name + (m.endText
+        ? 'We expect to be back by ' + m.endText + '.'
+        : "We'll be back soon.");
+      dot.classList.add('pulse');
+    } else {
+      pill.textContent = 'Scheduled maintenance';
+      title.textContent = 'Maintenance Scheduled';
+      tagline.textContent = 'Maintenance is scheduled for ' + m.rangeText + '.';
+      dot.classList.remove('pulse');
+    }
+  });
+})();
+</script>
 <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 
 </body>
