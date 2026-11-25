@@ -370,6 +370,20 @@ main { flex: 1; display: flex; flex-direction: column; }
   .fact { flex-direction: column; gap: 2px; }
   .fact dd { text-align: left; }
 }
+
+/* Added for the "nothing posted" state */
+[hidden] { display: none !important; }
+
+.status-dot.ok { background: var(--teal); }
+
+.detail-list {
+  margin: 0 0 14px;
+  padding-left: 1.1em;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+}
+
+.detail-list li { margin-bottom: 2px; }
 </style>
 </head>
 <body>
@@ -392,14 +406,15 @@ main { flex: 1; display: flex; flex-direction: column; }
             stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
     </svg>
 
-    <!-- The pill, headline and timeline below are filled in from js/status.js. -->
-    <div class="status"><span class="status-dot pulse" id="status-dot"></span><span id="status-text">Investigating</span></div>
+    <!-- Nothing here claims anything is down. js/status.js switches this to a
+         maintenance or incident message only when one is posted there. -->
+    <div class="status"><span class="status-dot ok" id="status-dot"></span><span id="status-text">No known issues</span></div>
 
-    <h1 id="page-title">We're Having Trouble</h1>
-    <p class="tagline" id="page-tagline">A service is temporarily down. We're working to get it back up and running.</p>
+    <h1 id="page-title">No Known Outages</h1>
+    <p class="tagline" id="page-tagline">We aren't aware of any maintenance or outages right now. If something isn't working for you, contact us with the details and we'll investigate.</p>
     <div class="hero-actions">
-      <a href="mailto:hello@felixfeger.com" class="btn">Contact Me</a>
-      <a href="javascript:location.reload()" class="btn btn-quiet">Try Again</a>
+      <a href="mailto:hello@felixfeger.com?subject=Possible%20issue%20on%20felixfeger.com&body=Hi%2C%0A%0AI%20think%20something%20isn%27t%20working.%20Here%20are%20the%20details%3A%0A%0AWhat%20I%20was%20trying%20to%20do%3A%0A%0APage%20or%20service%3A%0A%0AWhat%20happened%3A%0A%0AWhen%20it%20started%3A%0A%0ADevice%20and%20browser%3A%0A" class="btn">Contact Us</a>
+      <a href="status.html" class="btn btn-quiet" id="secondary-btn" hidden>View Status</a>
     </div>
   </section>
 
@@ -413,37 +428,44 @@ main { flex: 1; display: flex; flex-direction: column; }
 
   <section class="details">
     <div class="wrap">
-      <p class="section-label">Incident status</p>
+      <!-- Shown only when an incident is posted in js/status.js. -->
+      <div id="incident-details" hidden>
+        <p class="section-label">Incident status</p>
 
-      <!-- The current step is set from the active incident in js/status.js. -->
-      <ol class="steps">
-        <li class="step current" data-step="investigating">Investigating</li>
-        <li class="step" data-step="identified">Identified</li>
-        <li class="step" data-step="monitoring">Monitoring</li>
-        <li class="step" data-step="resolved">Resolved</li>
-      </ol>
+        <ol class="steps">
+          <li class="step current" data-step="investigating">Investigating</li>
+          <li class="step" data-step="identified">Identified</li>
+          <li class="step" data-step="monitoring">Monitoring</li>
+          <li class="step" data-step="resolved">Resolved</li>
+        </ol>
 
-      <div class="update">
-        <h3>Latest update</h3>
-        <time id="update-time"></time>
-        <p id="update-text">We're aware that a service is unavailable and are looking into the cause. We'll get it restored as quickly as we can.</p>
+        <div class="update">
+          <h3>Latest update</h3>
+          <time id="update-time"></time>
+          <p id="update-text"></p>
+        </div>
       </div>
 
       <div class="card-grid">
         <div class="card">
-          <h3>What's affected</h3>
-          <p id="affected-text">One of the services on the site is currently unavailable. Other parts of the site may still work as normal.</p>
+          <h3 id="c1-title">Status</h3>
+          <p id="c1-text">We aren't aware of any maintenance or outages at the moment.</p>
         </div>
 
         <div class="card">
-          <h3>What to do</h3>
-          <p>Nothing on your end. Try again in a few minutes, or use the Try Again button to reload the page.</p>
+          <h3 id="c2-title">Having trouble?</h3>
+          <p id="c2-text">If something isn't working for you, send us the details and we'll investigate.</p>
         </div>
 
         <div class="card">
-          <h3>Need help?</h3>
-          <p>Thanks for your patience. If this is urgent, send me an email.</p>
-          <a href="mailto:hello@felixfeger.com">hello@felixfeger.com</a>
+          <h3>Report a problem</h3>
+          <p>Email us with as much detail as you can and we'll investigate. It helps to include:</p>
+          <ul class="detail-list">
+            <li>What you were trying to do</li>
+            <li>The page or service</li>
+            <li>What happened, and when</li>
+          </ul>
+          <a href="mailto:hello@felixfeger.com?subject=Possible%20issue%20on%20felixfeger.com&body=Hi%2C%0A%0AI%20think%20something%20isn%27t%20working.%20Here%20are%20the%20details%3A%0A%0AWhat%20I%20was%20trying%20to%20do%3A%0A%0APage%20or%20service%3A%0A%0AWhat%20happened%3A%0A%0AWhen%20it%20started%3A%0A%0ADevice%20and%20browser%3A%0A">hello@felixfeger.com</a>
         </div>
       </div>
     </div>
@@ -457,27 +479,38 @@ main { flex: 1; display: flex; flex-direction: column; }
 </footer>
 <script src="js/status.js"></script>
 <script>
-// Fill in the page from the active incident in js/status.js. If that file
-// doesn't load, the text already on the page stays as it is.
+// Fill in the page from js/status.js. Until an incident is posted there, the
+// page says we aren't aware of any maintenance or outages, and it never claims
+// anything is down. If status.js doesn't load, that neutral text stays.
 (function () {
   if (!window.SiteStatus) return;
 
   var ORDER = ['investigating', 'identified', 'monitoring', 'resolved'];
 
-  var dot = document.getElementById('status-dot');
-  var pill = document.getElementById('status-text');
-  var tagline = document.getElementById('page-tagline');
-  var updateTime = document.getElementById('update-time');
-  var updateText = document.getElementById('update-text');
-  var affected = document.getElementById('affected-text');
+  var $ = function (id) { return document.getElementById(id); };
+  var dot = $('status-dot'), pill = $('status-text'), title = $('page-title');
+  var tagline = $('page-tagline'), secondary = $('secondary-btn');
+  var c1t = $('c1-title'), c1 = $('c1-text'), c2t = $('c2-title'), c2 = $('c2-text');
+  var details = $('incident-details');
+  var updateTime = $('update-time'), updateText = $('update-text');
   var steps = document.querySelectorAll('.step');
 
-  var fallback = {
-    pill: pill.textContent,
-    tagline: tagline.textContent,
-    update: updateText.textContent,
-    affected: affected.textContent
+  var neutral = {
+    pill: pill.textContent, title: title.textContent, tagline: tagline.textContent,
+    c1t: c1t.textContent, c1: c1.textContent, c2t: c2t.textContent, c2: c2.textContent
   };
+
+  function tone(kind) {
+    dot.classList.toggle('ok', kind === 'ok');
+    dot.classList.toggle('pulse', kind === 'warn');
+  }
+
+  function button(label, href) {
+    if (!label) { secondary.hidden = true; return; }
+    secondary.textContent = label;
+    secondary.setAttribute('href', href);
+    secondary.hidden = false;
+  }
 
   function setStep(status) {
     var at = ORDER.indexOf(status);
@@ -490,37 +523,46 @@ main { flex: 1; display: flex; flex-direction: column; }
 
   SiteStatus.subscribe(function () {
     var inc = SiteStatus.activeIncident();
+    var m = SiteStatus.currentMaintenance();
 
     if (!inc) {
-      // Nothing has been posted in js/status.js yet.
-      pill.textContent = fallback.pill;
-      tagline.textContent = fallback.tagline;
-      updateTime.textContent = '';
-      updateText.textContent = "No incident has been posted yet. We're aware of the problem and will add details here shortly.";
-      affected.textContent = fallback.affected;
-      dot.classList.add('pulse');
-      setStep('investigating');
+      details.hidden = true;
+      pill.textContent = m ? 'Maintenance posted' : neutral.pill;
+      title.textContent = neutral.title;
+      tagline.textContent = m
+        ? "We aren't aware of any outages right now, but there is maintenance posted."
+        : neutral.tagline;
+      c1t.textContent = neutral.c1t;
+      c1.textContent = m
+        ? "We aren't aware of any outages at the moment."
+        : neutral.c1;
+      c2t.textContent = neutral.c2t;
+      c2.textContent = neutral.c2;
+      tone(m ? 'info' : 'ok');
+      button(m ? 'View Status' : '', 'status.html');
       return;
     }
 
+    details.hidden = false;
     pill.textContent = inc.label;
+    title.textContent = "We're Having Trouble";
+    tagline.textContent = inc.item.title
+      ? inc.item.title.replace(/[.!?]+$/, '') + ". We're working to get it back up and running."
+      : "A service is having problems. We're working to get it back up and running.";
     setStep(inc.status);
-    dot.classList.add('pulse');
-
-    if (inc.item.title) {
-      tagline.textContent = inc.item.title.replace(/[.!?]+$/, '') +
-        ". We're working to get it back up and running.";
-    } else {
-      tagline.textContent = fallback.tagline;
-    }
+    tone('warn');
+    button('Try Again', 'javascript:location.reload()');
 
     var message = (inc.latest && inc.latest.message) || inc.item.description;
-    updateText.textContent = message || fallback.update;
+    updateText.textContent = message || "We're aware of the problem and are looking into it.";
     updateTime.textContent = inc.latest ? inc.latestTimeText : 'Started ' + inc.startedText;
 
-    affected.textContent = inc.item.affected
+    c1t.textContent = "What's affected";
+    c1.textContent = inc.item.affected
       ? 'Currently affected: ' + inc.item.affected + '. Other parts of the site may still work as normal.'
-      : fallback.affected;
+      : 'Part of the site is currently affected. Other parts may still work as normal.';
+    c2t.textContent = 'What to do';
+    c2.textContent = 'Nothing on your end. Try again in a few minutes, or use the Try Again button to reload the page.';
   });
 })();
 </script>
