@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<base href="/">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Status — Felix Feger</title>
+<meta name="description" content="Current incidents and scheduled maintenance.">
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<style>
+/* Standalone on purpose: no dependency on css/style.css or js/site.js,
+   so this page still works if the rest of the site is unavailable.
+   Colors, fonts and components are copied from css/style.css.
+   Only needs logo.png and favicon.ico from the site root. */
+
+@import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  --bg: #F5F1E8;
+  --bg-raised: #ECE5D3;
+  --ink: #3A362C;
+  --ink-soft: #6B6355;
+  --line: #D9D0BA;
+  --teal: #3E6B6B;
+  --teal-deep: #2C4D4D;
+  --amber: #C9932E;
+  --on-teal: #fff;
+
+  color-scheme: light dark;
+
+  --font-display: 'Quicksand', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --max-w: 980px;
+  --radius: 4px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1f1d19;
+    --bg-raised: #2a2721;
+    --ink: #efe9da;
+    --ink-soft: #b4ab96;
+    --line: #403b31;
+    --teal: #8bbcc2;
+    --teal-deep: #8bbcc2;
+    --on-teal: #1f1d19;
+  }
+
+  .brand-logo {
+    filter: invert(1);
+    mix-blend-mode: screen;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body { min-height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+img { max-width: 100%; display: block; }
+
+a { color: var(--teal-deep); text-decoration: none; }
+a:hover { text-decoration: underline; }
+a:focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; }
+
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 0.5em;
+  line-height: 1.15;
+}
+
+p { max-width: 62ch; }
+
+.wrap {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* Top bar */
+.site-header { border-bottom: 1px solid var(--line); }
+
+.site-header .wrap {
+  height: 64px;
+  display: flex;
+  align-items: center;
+}
+
+.brand-logo {
+  height: 36px;
+  width: auto;
+  mix-blend-mode: multiply;
+}
+
+/* Hero */
+main { flex: 1; display: flex; flex-direction: column; }
+
+.hero {
+  padding: 88px 24px 64px;
+  text-align: center;
+}
+
+.wave-icon {
+  display: block;
+  width: 64px;
+  height: auto;
+  margin: 0 auto 28px;
+  color: var(--teal);
+}
+
+.hero h1 { font-size: clamp(2.4rem, 6vw, 3.6rem); }
+
+.hero .tagline {
+  color: var(--ink-soft);
+  font-size: 1.15rem;
+  margin: 0 auto 32px;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* Status pill */
+.status {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg-raised);
+  border-radius: 999px;
+  padding: 6px 16px;
+  margin: 0 auto 24px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--amber);
+}
+
+.status-dot.pulse { animation: pulse 2s ease-in-out infinite; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-dot.pulse { animation: none; }
+}
+
+/* Buttons */
+.btn {
+  display: inline-block;
+  border: 1.5px solid var(--teal-deep);
+  color: var(--teal-deep);
+  font-family: var(--font-display);
+  font-weight: 600;
+  padding: 12px 30px;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--teal-deep);
+  color: var(--on-teal);
+  text-decoration: none;
+}
+
+.btn-quiet {
+  border-color: var(--line);
+  color: var(--ink-soft);
+}
+
+.btn-quiet:hover {
+  background: var(--bg-raised);
+  color: var(--ink);
+}
+
+/* Wave divider + detail band */
+.wave-divider {
+  display: block;
+  width: 100%;
+  height: 48px;
+  color: var(--bg-raised);
+}
+
+.details {
+  flex: 1;
+  background: var(--bg-raised);
+  padding: 40px 24px 72px;
+}
+
+.section-label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  text-align: center;
+  margin: 0 auto 18px;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+.card {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  padding: 26px 22px;
+}
+
+.card h3 { font-size: 1.1rem; margin-bottom: 6px; }
+
+.card p {
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+  margin: 0 0 14px;
+}
+
+.card p:last-child { margin-bottom: 0; }
+
+.card a { font-weight: 600; font-size: 0.92rem; }
+
+/* Facts list (maintenance) */
+.facts {
+  max-width: 560px;
+  margin: 0 auto 36px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.fact {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 22px;
+  font-size: 0.95rem;
+}
+
+.fact + .fact { border-top: 1px solid var(--line); }
+.fact dt { color: var(--ink-soft); font-weight: 500; }
+.fact dd { margin: 0; font-weight: 600; text-align: right; }
+
+/* Progress tracker (outage) */
+.steps {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  max-width: 720px;
+  margin: 0 auto 28px;
+  padding: 0;
+}
+
+.step {
+  position: relative;
+  text-align: center;
+  padding-top: 30px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+.step::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  background: var(--bg-raised);
+  z-index: 1;
+}
+
+.step + .step::after {
+  content: '';
+  position: absolute;
+  top: 7px;
+  right: 50%;
+  width: 100%;
+  height: 2px;
+  background: var(--line);
+}
+
+.step.done::before,
+.step.current::before {
+  border-color: var(--teal);
+  background: var(--teal);
+}
+
+.step.current::before {
+  border-color: var(--amber);
+  background: var(--amber);
+}
+
+.step.done::after,
+.step.current::after { background: var(--teal); }
+
+.step.current {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.step.current::before { animation: pulse 2s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .step.current::before { animation: none; }
+}
+
+.update {
+  max-width: 720px;
+  margin: 0 auto 36px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--amber);
+  background: var(--bg);
+  padding: 20px 22px;
+}
+
+.update h3 { font-size: 1.05rem; margin-bottom: 6px; }
+.update p { margin: 0; color: var(--ink-soft); font-size: 0.95rem; }
+
+/* Footer */
+.site-footer {
+  border-top: 1px solid var(--line);
+  padding: 22px 24px;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+.site-footer a { color: var(--ink-soft); text-decoration: underline; }
+
+.sf-fallback { text-align: center; color: var(--ink-soft); margin: 0 auto; }
+
+@media (max-width: 720px) {
+  .hero { padding: 64px 24px 48px; }
+  .card-grid { grid-template-columns: 1fr; }
+  .step { font-size: 0.78rem; }
+  .fact { flex-direction: column; gap: 2px; }
+  .fact dd { text-align: left; }
+}
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <img class="brand-logo" src="logo.png" alt="Office of Felix Feger">
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <svg class="wave-icon" viewBox="0 0 64 40" fill="none"
+         xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M2 10 Q10 2 18 10 T34 10 T50 10 T62 10"
+            stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+      <path d="M2 20 Q10 12 18 20 T34 20 T50 20 T62 20"
+            stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+      <path d="M2 30 Q10 22 18 30 T34 30 T50 30 T62 30"
+            stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+    </svg>
+
+    <h1>Service Status</h1>
+    <p class="tagline">Current incidents and scheduled maintenance.</p>
+    <div class="hero-actions">
+      <a href="mailto:hello@felixfeger.com" class="btn">Contact Me</a>
+    </div>
+  </section>
+
+  <svg class="wave-divider" viewBox="0 0 1200 60"
+       preserveAspectRatio="none" aria-hidden="true">
+    <path d="M0,30 C150,60 350,0 600,30
+             C850,60 1050,0 1200,30
+             L1200,60 L0,60 Z"
+          fill="currentColor"/>
+  </svg>
+
+  <section class="details">
+    <div class="wrap">
+      <!-- js/status.js fills this in. Add incidents and maintenance there. -->
+      <div data-status-feed>
+        <p class="sf-fallback">Loading status&hellip;</p>
+        <noscript>JavaScript is needed to show the status. You can reach me at hello@felixfeger.com.</noscript>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  &copy; <span id="year">2026</span> Felix Feger &middot;
+  <a href="mailto:hello@felixfeger.com">hello@felixfeger.com</a>
+</footer>
+<script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+
+<script src="js/status.js"></script>
+
+</body>
+</html>
