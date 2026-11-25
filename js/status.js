@@ -18,8 +18,9 @@
 //   data-empty-incidents="..."    text shown when there are no incidents
 //   data-empty-maintenance="..."  text shown when there is no maintenance
 //
-// When there is nothing to show, the feed says so ("No active incidents.",
-// "No scheduled maintenance.", and so on).
+// When there is nothing to show, the feed says we aren't aware of any
+// maintenance or outages and asks people to contact us. It never says
+// anything is down unless you've added it below.
 //
 // Pages can also read the current state through window.SiteStatus (see the
 // bottom of this file). maintenance.html and outage.html do this to fill in
@@ -43,7 +44,10 @@
 
     // Show resolved incidents and completed maintenance for a while.
     showHistory: true,
-    historyDays: 30
+    historyDays: 30,
+
+    // Shown in the "nothing posted" message so people know who to contact.
+    contactEmail: "hello@felixfeger.com"
   };
 
 
@@ -349,29 +353,42 @@
     return h("p", "sf-empty", text);
   }
 
+  function contactLine(lead) {
+    var p = h("p");
+    p.appendChild(document.createTextNode(lead));
+    var a = h("a", "", "contact us");
+    a.href = "mailto:" + SETTINGS.contactEmail;
+    a.style.color = "inherit";
+    a.style.textDecoration = "underline";
+    p.appendChild(a);
+    p.appendChild(document.createTextNode(" with the details and we'll investigate."));
+    return p;
+  }
+
   function banner(activeIncidents, runningMaint, upcomingMaint) {
     var box = h("div", "sf-banner");
     var dot = h("span", "sf-dot");
+    var text = h("div");
     var title, sub;
 
     if (activeIncidents.length) {
       dot.setAttribute("data-tone", "warn");
       title = activeIncidents.length === 1 ? "Active incident" : activeIncidents.length + " active incidents";
-      sub = "We're working to resolve it. Details below.";
+      sub = h("p", "", "We're working to resolve it. Details below.");
     } else if (runningMaint.length) {
       dot.setAttribute("data-tone", "info");
       title = "Maintenance in progress";
-      sub = "Some things may be unavailable for a short time.";
+      sub = h("p", "", "Some things may be unavailable for a short time.");
+    } else if (upcomingMaint.length) {
+      title = "No known outages";
+      sub = h("p", "", "Maintenance is scheduled. Details below.");
     } else {
-      title = "All systems operational";
-      sub = upcomingMaint.length
-        ? "Maintenance is scheduled. Details below."
-        : "No active incidents or scheduled maintenance.";
+      title = "No known issues";
+      sub = contactLine("We aren't aware of any maintenance or outages. If something isn't working for you, ");
     }
 
-    var text = h("div");
     text.appendChild(h("h2", "", title));
-    text.appendChild(h("p", "", sub));
+    text.appendChild(sub);
     box.appendChild(dot);
     box.appendChild(text);
     return box;
@@ -436,7 +453,7 @@
           incSection.appendChild(incidentCard(e.item, e.status));
         });
       } else {
-        incSection.appendChild(empty(container.getAttribute("data-empty-incidents") || "No active incidents."));
+        incSection.appendChild(empty(container.getAttribute("data-empty-incidents") || "We aren't aware of any outages right now."));
       }
       root.appendChild(incSection);
     }
@@ -449,7 +466,7 @@
           mSection.appendChild(maintenanceCard(e.item, e.status));
         });
       } else {
-        mSection.appendChild(empty(container.getAttribute("data-empty-maintenance") || "No scheduled maintenance."));
+        mSection.appendChild(empty(container.getAttribute("data-empty-maintenance") || "We aren't aware of any maintenance right now."));
       }
       root.appendChild(mSection);
     }
