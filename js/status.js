@@ -15,9 +15,15 @@
 //   data-show="incidents"    only incidents
 //   data-show="maintenance"  only maintenance
 //   data-history="false"     hide the "Past events" section
+//   data-empty-incidents="..."    text shown when there are no incidents
+//   data-empty-maintenance="..."  text shown when there is no maintenance
 //
 // When there is nothing to show, the feed says so ("No active incidents.",
 // "No scheduled maintenance.", and so on).
+//
+// Pages can also read the current state through window.SiteStatus (see the
+// bottom of this file). maintenance.html and outage.html do this to fill in
+// their headline, status pill and timeline.
 //
 // Maintenance status is worked out from the start and end times, so a
 // window moves from Scheduled to In progress to Completed on its own.
@@ -430,7 +436,7 @@
           incSection.appendChild(incidentCard(e.item, e.status));
         });
       } else {
-        incSection.appendChild(empty("No active incidents."));
+        incSection.appendChild(empty(container.getAttribute("data-empty-incidents") || "No active incidents."));
       }
       root.appendChild(incSection);
     }
@@ -443,7 +449,7 @@
           mSection.appendChild(maintenanceCard(e.item, e.status));
         });
       } else {
-        mSection.appendChild(empty("No scheduled maintenance."));
+        mSection.appendChild(empty(container.getAttribute("data-empty-maintenance") || "No scheduled maintenance."));
       }
       root.appendChild(mSection);
     }
@@ -471,9 +477,83 @@
     container.appendChild(root);
   }
 
+
+  // ---- Read-only API for other pages ----------------------------------
+  //
+  //   SiteStatus.activeIncident()      newest unresolved incident, or null
+  //   SiteStatus.currentMaintenance()  maintenance in progress, otherwise the
+  //                                    next scheduled one, or null
+  //   SiteStatus.subscribe(fn)         runs fn now and again every minute
+  //   SiteStatus.labels                the status names shown on the pages
+
+  var listeners = [];
+
+  function activeIncident() {
+    var open = [];
+    INCIDENTS.forEach(function (i) {
+      var s = incidentStatus(i);
+      if (s !== "resolved") open.push({ item: i, status: s });
+    });
+    if (!open.length) return null;
+    open.sort(function (a, b) {
+      return (time(b.item.started) || 0) - (time(a.item.started) || 0);
+    });
+    var top = open[0];
+    var last = latestUpdate(top.item);
+    return {
+      item: top.item,
+      status: top.status,
+      label: LABELS[top.status] || top.status,
+      startedText: fmtDateTime(top.item.started),
+      latest: last,
+      latestTimeText: last ? fmtDateTime(last.time) : ""
+    };
+  }
+
+  function currentMaintenance() {
+    var now = Date.now();
+    var running = [], upcoming = [];
+    MAINTENANCES.forEach(function (m) {
+      var s = maintenanceStatus(m, now);
+      if (s === "in-progress") running.push({ item: m, status: s });
+      else if (s === "scheduled") upcoming.push({ item: m, status: s });
+    });
+    function byStart(a, b) {
+      return (time(a.item.start) || 0) - (time(b.item.start) || 0);
+    }
+    running.sort(byStart);
+    upcoming.sort(byStart);
+    var pick = running[0] || upcoming[0];
+    if (!pick) return null;
+    return {
+      item: pick.item,
+      status: pick.status,
+      label: LABELS[pick.status] || pick.status,
+      rangeText: fmtRange(pick.item.start, pick.item.end),
+      endText: pick.item.end ? fmtDateTime(pick.item.end) : ""
+    };
+  }
+
+  function notify() {
+    listeners.forEach(function (fn) {
+      try { fn(); } catch (e) { /* a page's own code shouldn't break the feed */ }
+    });
+  }
+
+  window.SiteStatus = {
+    labels: LABELS,
+    activeIncident: activeIncident,
+    currentMaintenance: currentMaintenance,
+    subscribe: function (fn) {
+      listeners.push(fn);
+      try { fn(); } catch (e) { /* see notify() */ }
+    }
+  };
+
   function renderAll() {
     var containers = document.querySelectorAll("[data-status-feed]");
     for (var i = 0; i < containers.length; i++) render(containers[i]);
+    notify();
   }
 
   function start() {
