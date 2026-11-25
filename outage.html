@@ -12,7 +12,7 @@
 /* Standalone on purpose: no dependency on css/style.css or js/site.js,
    so this page still works if the rest of the site is unavailable.
    Colors, fonts and components are copied from css/style.css.
-   Only needs logo.png and favicon.ico from the site root. */
+   The logo loads from felixfeger.com/logo.png. Status details come from js/status.js. */
 
 @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');
 
@@ -349,6 +349,8 @@ main { flex: 1; display: flex; flex-direction: column; }
 
 .update h3 { font-size: 1.05rem; margin-bottom: 6px; }
 .update p { margin: 0; color: var(--ink-soft); font-size: 0.95rem; }
+.update time { display: block; font-size: 0.82rem; color: var(--ink-soft); margin-bottom: 4px; }
+.update time:empty { display: none; }
 
 /* Footer */
 .site-footer {
@@ -374,7 +376,7 @@ main { flex: 1; display: flex; flex-direction: column; }
 
 <header class="site-header">
   <div class="wrap">
-    <img class="brand-logo" src="logo.png" alt="Office of Felix Feger">
+    <img class="brand-logo" src="https://felixfeger.com/logo.png" alt="Office of Felix Feger">
   </div>
 </header>
 
@@ -390,11 +392,11 @@ main { flex: 1; display: flex; flex-direction: column; }
             stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
     </svg>
 
-    <!-- Keep the pill text in sync with the current step below. -->
-    <div class="status"><span class="status-dot pulse"></span>Investigating</div>
+    <!-- The pill, headline and timeline below are filled in from js/status.js. -->
+    <div class="status"><span class="status-dot pulse" id="status-dot"></span><span id="status-text">Investigating</span></div>
 
-    <h1>We're Having Trouble</h1>
-    <p class="tagline">A service is temporarily down. We're working to get it back up and running.</p>
+    <h1 id="page-title">We're Having Trouble</h1>
+    <p class="tagline" id="page-tagline">A service is temporarily down. We're working to get it back up and running.</p>
     <div class="hero-actions">
       <a href="mailto:hello@felixfeger.com" class="btn">Contact Me</a>
       <a href="javascript:location.reload()" class="btn btn-quiet">Try Again</a>
@@ -413,24 +415,24 @@ main { flex: 1; display: flex; flex-direction: column; }
     <div class="wrap">
       <p class="section-label">Incident status</p>
 
-      <!-- Move class="current" to the step that applies. Steps before it get
-           class="done"; steps after it get no class. -->
+      <!-- The current step is set from the active incident in js/status.js. -->
       <ol class="steps">
-        <li class="step current">Investigating</li>
-        <li class="step">Identified</li>
-        <li class="step">Monitoring</li>
-        <li class="step">Resolved</li>
+        <li class="step current" data-step="investigating">Investigating</li>
+        <li class="step" data-step="identified">Identified</li>
+        <li class="step" data-step="monitoring">Monitoring</li>
+        <li class="step" data-step="resolved">Resolved</li>
       </ol>
 
       <div class="update">
         <h3>Latest update</h3>
-        <p>We're aware that a service is unavailable and are looking into the cause. We'll get it restored as quickly as we can.</p>
+        <time id="update-time"></time>
+        <p id="update-text">We're aware that a service is unavailable and are looking into the cause. We'll get it restored as quickly as we can.</p>
       </div>
 
       <div class="card-grid">
         <div class="card">
           <h3>What's affected</h3>
-          <p>One of the services on the site is currently unavailable. Other parts of the site may still work as normal.</p>
+          <p id="affected-text">One of the services on the site is currently unavailable. Other parts of the site may still work as normal.</p>
         </div>
 
         <div class="card">
@@ -450,8 +452,78 @@ main { flex: 1; display: flex; flex-direction: column; }
 
 <footer class="site-footer">
   &copy; <span id="year">2026</span> Felix Feger &middot;
-  <a href="mailto:hello@felixfeger.com">hello@felixfeger.com</a>
+  <a href="mailto:hello@felixfeger.com">hello@felixfeger.com</a> &middot;
+  <a href="status.html">Status</a>
 </footer>
+<script src="js/status.js"></script>
+<script>
+// Fill in the page from the active incident in js/status.js. If that file
+// doesn't load, the text already on the page stays as it is.
+(function () {
+  if (!window.SiteStatus) return;
+
+  var ORDER = ['investigating', 'identified', 'monitoring', 'resolved'];
+
+  var dot = document.getElementById('status-dot');
+  var pill = document.getElementById('status-text');
+  var tagline = document.getElementById('page-tagline');
+  var updateTime = document.getElementById('update-time');
+  var updateText = document.getElementById('update-text');
+  var affected = document.getElementById('affected-text');
+  var steps = document.querySelectorAll('.step');
+
+  var fallback = {
+    pill: pill.textContent,
+    tagline: tagline.textContent,
+    update: updateText.textContent,
+    affected: affected.textContent
+  };
+
+  function setStep(status) {
+    var at = ORDER.indexOf(status);
+    if (at < 0) at = 0;
+    for (var i = 0; i < steps.length; i++) {
+      steps[i].classList.toggle('done', i < at);
+      steps[i].classList.toggle('current', i === at);
+    }
+  }
+
+  SiteStatus.subscribe(function () {
+    var inc = SiteStatus.activeIncident();
+
+    if (!inc) {
+      // Nothing has been posted in js/status.js yet.
+      pill.textContent = fallback.pill;
+      tagline.textContent = fallback.tagline;
+      updateTime.textContent = '';
+      updateText.textContent = "No incident has been posted yet. We're aware of the problem and will add details here shortly.";
+      affected.textContent = fallback.affected;
+      dot.classList.add('pulse');
+      setStep('investigating');
+      return;
+    }
+
+    pill.textContent = inc.label;
+    setStep(inc.status);
+    dot.classList.add('pulse');
+
+    if (inc.item.title) {
+      tagline.textContent = inc.item.title.replace(/[.!?]+$/, '') +
+        ". We're working to get it back up and running.";
+    } else {
+      tagline.textContent = fallback.tagline;
+    }
+
+    var message = (inc.latest && inc.latest.message) || inc.item.description;
+    updateText.textContent = message || fallback.update;
+    updateTime.textContent = inc.latest ? inc.latestTimeText : 'Started ' + inc.startedText;
+
+    affected.textContent = inc.item.affected
+      ? 'Currently affected: ' + inc.item.affected + '. Other parts of the site may still work as normal.'
+      : fallback.affected;
+  });
+})();
+</script>
 <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 
 </body>
