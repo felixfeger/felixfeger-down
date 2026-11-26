@@ -477,6 +477,15 @@ main { flex: 1; display: flex; flex-direction: column; }
   <a href="mailto:hello@felixfeger.com">hello@felixfeger.com</a> &middot;
   <a href="status.html">Status</a>
 </footer>
+<script>
+// ?service=tv (added by the redirect gate) narrows the page to that service.
+(function () {
+  var s = new URLSearchParams(location.search).get('service') || '';
+  if (!/^[a-z0-9-]{1,30}$/.test(s)) return;
+  var box = document.querySelector('[data-status-feed]');
+  if (box) box.setAttribute('data-service', s);
+})();
+</script>
 <script src="js/status.js"></script>
 <script>
 // Fill in the page from js/status.js. Until an incident is posted there, the
@@ -486,6 +495,15 @@ main { flex: 1; display: flex; flex-direction: column; }
   if (!window.SiteStatus) return;
 
   var ORDER = ['investigating', 'identified', 'monitoring', 'resolved'];
+
+  var params = new URLSearchParams(location.search);
+  var svc = /^[a-z0-9-]{1,30}$/.test(params.get('service') || '') ? params.get('service') : '';
+
+  // "Felix TV: Down for Maintenance" when we know which service this is about.
+  function withName(text) {
+    var name = svc ? SiteStatus.serviceName(svc) : '';
+    return name && name !== svc ? name + ': ' + text : text;
+  }
 
   var $ = function (id) { return document.getElementById(id); };
   var dot = $('status-dot'), pill = $('status-text'), title = $('page-title');
@@ -522,8 +540,8 @@ main { flex: 1; display: flex; flex-direction: column; }
   }
 
   SiteStatus.subscribe(function () {
-    var inc = SiteStatus.activeIncident();
-    var m = SiteStatus.currentMaintenance();
+    var inc = SiteStatus.activeIncident(svc);
+    var m = SiteStatus.currentMaintenance(svc);
 
     if (!inc && !m && SiteStatus.feedState && SiteStatus.feedState() === 'unavailable') {
       // The live feed couldn't be reached, so don't claim all is well.
@@ -560,7 +578,7 @@ main { flex: 1; display: flex; flex-direction: column; }
 
     details.hidden = false;
     pill.textContent = inc.label;
-    title.textContent = "We're Having Trouble";
+    title.textContent = withName("We're Having Trouble");
     tagline.textContent = inc.item.title
       ? inc.item.title.replace(/[.!?]+$/, '') + ". We're working to get it back up and running."
       : "A service is having problems. We're working to get it back up and running.";
