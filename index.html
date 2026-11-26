@@ -500,6 +500,20 @@ main { flex: 1; display: flex; flex-direction: column; }
     var m = SiteStatus.currentMaintenance();
     var inc = SiteStatus.activeIncident();
 
+    if (!inc && !m && SiteStatus.feedState && SiteStatus.feedState() === 'unavailable') {
+      // The live feed couldn't be reached, so don't claim all is well.
+      pill.textContent = 'Status unavailable';
+      title.textContent = 'Status Unavailable';
+      tagline.textContent = "We couldn't load live status just now. If something isn't working for you, contact us with the details and we'll investigate.";
+      c1t.textContent = neutral.c1t;
+      c1.textContent = "We couldn't load live status just now.";
+      c2t.textContent = neutral.c2t;
+      c2.textContent = neutral.c2;
+      tone('info');
+      button('', '');
+      return;
+    }
+
     if (!m) {
       pill.textContent = neutral.pill;
       title.textContent = neutral.title;
