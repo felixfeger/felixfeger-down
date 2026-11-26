@@ -465,6 +465,15 @@ main { flex: 1; display: flex; flex-direction: column; }
   <a href="mailto:hello@felixfeger.com">hello@felixfeger.com</a> &middot;
   <a href="status.html">Status</a>
 </footer>
+<script>
+// ?service=tv (added by the redirect gate) narrows the page to that service.
+(function () {
+  var s = new URLSearchParams(location.search).get('service') || '';
+  if (!/^[a-z0-9-]{1,30}$/.test(s)) return;
+  var box = document.querySelector('[data-status-feed]');
+  if (box) box.setAttribute('data-service', s);
+})();
+</script>
 <script src="js/status.js"></script>
 <script>
 // Fill in the page from js/status.js. Until a maintenance window is posted
@@ -473,6 +482,15 @@ main { flex: 1; display: flex; flex-direction: column; }
 // stays.
 (function () {
   if (!window.SiteStatus) return;
+
+  var params = new URLSearchParams(location.search);
+  var svc = /^[a-z0-9-]{1,30}$/.test(params.get('service') || '') ? params.get('service') : '';
+
+  // "Felix TV: Down for Maintenance" when we know which service this is about.
+  function withName(text) {
+    var name = svc ? SiteStatus.serviceName(svc) : '';
+    return name && name !== svc ? name + ': ' + text : text;
+  }
 
   var $ = function (id) { return document.getElementById(id); };
   var dot = $('status-dot'), pill = $('status-text'), title = $('page-title');
@@ -497,8 +515,8 @@ main { flex: 1; display: flex; flex-direction: column; }
   }
 
   SiteStatus.subscribe(function () {
-    var m = SiteStatus.currentMaintenance();
-    var inc = SiteStatus.activeIncident();
+    var m = SiteStatus.currentMaintenance(svc);
+    var inc = SiteStatus.activeIncident(svc);
 
     if (!inc && !m && SiteStatus.feedState && SiteStatus.feedState() === 'unavailable') {
       // The live feed couldn't be reached, so don't claim all is well.
@@ -534,7 +552,7 @@ main { flex: 1; display: flex; flex-direction: column; }
 
     if (m.status === 'in-progress') {
       pill.textContent = 'Maintenance in progress';
-      title.textContent = 'Down for Maintenance';
+      title.textContent = withName('Down for Maintenance');
       var name = m.item.title ? 'Currently underway: ' + m.item.title.replace(/[.!?]+$/, '') + '. ' : '';
       tagline.textContent = name + (m.endText
         ? 'We expect to be back by ' + m.endText + '.'
@@ -547,7 +565,7 @@ main { flex: 1; display: flex; flex-direction: column; }
       button('Try Again', 'javascript:location.reload()');
     } else {
       pill.textContent = 'Scheduled maintenance';
-      title.textContent = 'Maintenance Scheduled';
+      title.textContent = withName('Maintenance Scheduled');
       tagline.textContent = 'Maintenance is scheduled for ' + m.rangeText + '.';
       c1t.textContent = "What's planned";
       c1.textContent = 'Some pages or features may be unavailable during that time.';
