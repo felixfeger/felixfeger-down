@@ -1,8 +1,13 @@
 // js/status.js
 //
-// Standalone status feed. Edit the two lists in the DATA section below to
-// add, change or remove incidents and maintenance windows. Nothing else in
-// this file needs to change.
+// Standalone status feed. It shows incidents and maintenance from two places:
+//
+//   1. A live feed from your status Worker (set feedUrl in SETTINGS). This is
+//      where the dashboard and Better Stack monitoring show up.
+//   2. The two hand-written lists in the DATA section below. Use these for
+//      anything you want to pin without the Worker, or as a backup.
+//
+// If both contain the same id, the live feed wins.
 //
 // To show the feed on any page:
 //
@@ -47,7 +52,15 @@
     historyDays: 30,
 
     // Shown in the "nothing posted" message so people know who to contact.
-    contactEmail: "hello@felixfeger.com"
+    contactEmail: "hello@felixfeger.com",
+
+    // Address of your status Worker's public feed, for example
+    // "https://status-api.felixfeger.com/api/status". Leave it empty to use
+    // only the hand-written lists below.
+    feedUrl: "",
+
+    // How long to wait for the feed before showing what we have.
+    feedTimeoutMs: 4000
   };
 
 
@@ -126,6 +139,25 @@
   // =====================================================================
 
   var DAY = 24 * 60 * 60 * 1000;
+
+  // What the live feed last returned. Merged with the hand-written lists.
+  var live = { incidents: [], maintenances: [] };
+
+  function merge(local, remote) {
+    var seen = {};
+    var out = [];
+    remote.forEach(function (item) {
+      if (item && item.id) seen[item.id] = true;
+      out.push(item);
+    });
+    local.forEach(function (item) {
+      if (!(item && item.id && seen[item.id])) out.push(item);
+    });
+    return out;
+  }
+
+  function allIncidents() { return merge(INCIDENTS, live.incidents); }
+  function allMaintenances() { return merge(MAINTENANCES, live.maintenances); }
 
   // ---- Styles (injected once; uses the site's colors when present) ------
 
@@ -382,6 +414,10 @@
     } else if (upcomingMaint.length) {
       title = "No known outages";
       sub = h("p", "", "Maintenance is scheduled. Details below.");
+    } else if (feedState === "unavailable") {
+      dot.setAttribute("data-tone", "info");
+      title = "Status unavailable";
+      sub = contactLine("We couldn't load live status just now. If something isn't working for you, ");
     } else {
       title = "No known issues";
       sub = contactLine("We aren't aware of any maintenance or outages. If something isn't working for you, ");
@@ -406,7 +442,7 @@
 
     // Sort everything into active and past.
     var activeIncidents = [], pastIncidents = [];
-    INCIDENTS.forEach(function (i) {
+    allIncidents().forEach(function (i) {
       var s = incidentStatus(i);
       (s === "resolved" ? pastIncidents : activeIncidents).push({ item: i, status: s });
     });
@@ -415,7 +451,7 @@
     });
 
     var upcomingMaint = [], runningMaint = [], pastMaint = [];
-    MAINTENANCES.forEach(function (m) {
+    allMaintenances().forEach(function (m) {
       var s = maintenanceStatus(m, now);
       var entry = { item: m, status: s };
       if (s === "completed") pastMaint.push(entry);
@@ -453,7 +489,7 @@
           incSection.appendChild(incidentCard(e.item, e.status));
         });
       } else {
-        incSection.appendChild(empty(container.getAttribute("data-empty-incidents") || "We aren't aware of any outages right now."));
+        incSection.appendChild(empty(feedState === "unavailable" ? "We couldn't load live status just now." : (container.getAttribute("data-empty-incidents") || "We aren't aware of any outages right now.")));
       }
       root.appendChild(incSection);
     }
@@ -466,7 +502,7 @@
           mSection.appendChild(maintenanceCard(e.item, e.status));
         });
       } else {
-        mSection.appendChild(empty(container.getAttribute("data-empty-maintenance") || "We aren't aware of any maintenance right now."));
+        mSection.appendChild(empty(feedState === "unavailable" ? "We couldn't load live status just now." : (container.getAttribute("data-empty-maintenance") || "We aren't aware of any maintenance right now.")));
       }
       root.appendChild(mSection);
     }
@@ -505,9 +541,14 @@
 
   var listeners = [];
 
+  // "off" (no feedUrl), "ok", "cached" (feed down, using a saved copy) or
+  // "unavailable" (feed down and nothing saved).
+  var feedState = SETTINGS.feedUrl ? "unavailable" : "off";
+  var ready = !SETTINGS.feedUrl;
+
   function activeIncident() {
     var open = [];
-    INCIDENTS.forEach(function (i) {
+    allIncidents().forEach(function (i) {
       var s = incidentStatus(i);
       if (s !== "resolved") open.push({ item: i, status: s });
     });
@@ -530,7 +571,7 @@
   function currentMaintenance() {
     var now = Date.now();
     var running = [], upcoming = [];
-    MAINTENANCES.forEach(function (m) {
+    allMaintenances().forEach(function (m) {
       var s = maintenanceStatus(m, now);
       if (s === "in-progress") running.push({ item: m, status: s });
       else if (s === "scheduled") upcoming.push({ item: m, status: s });
@@ -552,6 +593,7 @@
   }
 
   function notify() {
+    if (!ready) return;
     listeners.forEach(function (fn) {
       try { fn(); } catch (e) { /* a page's own code shouldn't break the feed */ }
     });
@@ -561,11 +603,72 @@
     labels: LABELS,
     activeIncident: activeIncident,
     currentMaintenance: currentMaintenance,
+    feedState: function () { return feedState; },
     subscribe: function (fn) {
       listeners.push(fn);
-      try { fn(); } catch (e) { /* see notify() */ }
+      // Wait for the first look at the feed so a page doesn't flash
+      // "no known issues" while an incident is still loading.
+      if (ready) {
+        try { fn(); } catch (e) { /* see notify() */ }
+      }
     }
   };
+
+  // ---- Live feed ------------------------------------------------------
+
+  var CACHE_KEY = "siteStatusFeed";
+
+  function loadSaved() {
+    try {
+      var saved = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
+      if (saved && Date.now() - saved.savedAt < DAY) return saved.feed;
+    } catch (e) { /* storage unavailable */ }
+    return null;
+  }
+
+  function save(feed) {
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ savedAt: Date.now(), feed: feed }));
+    } catch (e) { /* storage unavailable */ }
+  }
+
+  function applyFeed(feed) {
+    live.incidents = feed && Array.isArray(feed.incidents) ? feed.incidents : [];
+    live.maintenances = feed && Array.isArray(feed.maintenances) ? feed.maintenances : [];
+  }
+
+  function fetchFeed() {
+    if (!SETTINGS.feedUrl || typeof fetch !== "function") return Promise.resolve();
+
+    var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    var timer = controller ? setTimeout(function () { controller.abort(); }, SETTINGS.feedTimeoutMs) : null;
+
+    return fetch(SETTINGS.feedUrl, { cache: "no-store", signal: controller ? controller.signal : undefined })
+      .then(function (res) {
+        if (!res.ok) throw new Error("feed " + res.status);
+        return res.json();
+      })
+      .then(function (feed) {
+        applyFeed(feed);
+        save(feed);
+        feedState = "ok";
+      })
+      .catch(function () {
+        // Fall back to the last copy we saw (up to a day old) so a hiccup
+        // doesn't hide an incident that was already showing.
+        var saved = loadSaved();
+        if (saved) {
+          applyFeed(saved);
+          feedState = "cached";
+        } else {
+          applyFeed(null);
+          feedState = "unavailable";
+        }
+      })
+      .then(function () {
+        if (timer) clearTimeout(timer);
+      });
+  }
 
   function renderAll() {
     var containers = document.querySelectorAll("[data-status-feed]");
@@ -575,9 +678,21 @@
 
   function start() {
     injectStyles();
-    renderAll();
-    // Re-check once a minute so maintenance windows change status on their own.
-    setInterval(renderAll, 60 * 1000);
+
+    if (!SETTINGS.feedUrl) {
+      renderAll();
+      // Re-check once a minute so maintenance windows change status on their own.
+      setInterval(renderAll, 60 * 1000);
+      return;
+    }
+
+    fetchFeed().then(function () {
+      ready = true;
+      renderAll();
+    });
+    setInterval(function () {
+      fetchFeed().then(renderAll);
+    }, 60 * 1000);
   }
 
   if (document.readyState === "loading") {
