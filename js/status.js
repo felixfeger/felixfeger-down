@@ -20,6 +20,8 @@
 //   data-show="incidents"    only incidents
 //   data-show="maintenance"  only maintenance
 //   data-history="false"     hide the "Past events" section
+//   data-service="tv"        only show things for one service (by id), plus
+//                            general notices that aren't tied to a service
 //   data-empty-incidents="..."    text shown when there are no incidents
 //   data-empty-maintenance="..."  text shown when there is no maintenance
 //
@@ -57,7 +59,7 @@
     // Address of your status Worker's public feed, for example
     // "https://status-api.felixfeger.com/api/status". Leave it empty to use
     // only the hand-written lists below.
-    feedUrl: "https://status-api.felixfeger.com/api/status",
+    feedUrl: "",
 
     // How long to wait for the feed before showing what we have.
     feedTimeoutMs: 4000
@@ -141,7 +143,28 @@
   var DAY = 24 * 60 * 60 * 1000;
 
   // What the live feed last returned. Merged with the hand-written lists.
-  var live = { incidents: [], maintenances: [] };
+  var live = { incidents: [], maintenances: [], services: [] };
+
+  function serviceName(id) {
+    for (var i = 0; i < live.services.length; i++) {
+      if (live.services[i].id === id) return live.services[i].name;
+    }
+    return id;
+  }
+
+  // An item matches a service if it names it, or isn't tied to any service.
+  function matchesService(item, service) {
+    if (!service) return true;
+    var list = item && item.services;
+    if (!list || !list.length) return true;
+    return list.indexOf(service) !== -1;
+  }
+
+  // "Affected" text: what was written by hand, otherwise the service names.
+  function affectedText(item) {
+    if (item.affected) return item.affected;
+    return (item.services || []).map(serviceName).join(", ");
+  }
 
   function merge(local, remote) {
     var seen = {};
@@ -336,7 +359,7 @@
     if (status === "resolved" && incidentEnd(incident)) {
       meta += " \u00B7 Resolved " + fmtDateTime(new Date(incidentEnd(incident)).toISOString());
     }
-    if (incident.affected) meta += " \u00B7 Affected: " + incident.affected;
+    if (affectedText(incident)) meta += " \u00B7 Affected: " + affectedText(incident);
     card.appendChild(h("p", "sf-meta", meta));
 
     if (incident.description) card.appendChild(h("p", "sf-desc", incident.description));
@@ -368,7 +391,7 @@
     card.appendChild(top);
 
     var meta = fmtRange(m.start, m.end);
-    if (m.affected) meta += " \u00B7 Affected: " + m.affected;
+    if (affectedText(m)) meta += " \u00B7 Affected: " + affectedText(m);
     card.appendChild(h("p", "sf-meta", meta));
 
     if (m.description) card.appendChild(h("p", "sf-desc", m.description));
@@ -436,6 +459,7 @@
   function render(container) {
     var now = Date.now();
     var show = (container.getAttribute("data-show") || "all").toLowerCase();
+    var service = container.getAttribute("data-service") || "";
     var wantHistory = container.getAttribute("data-history") !== "false" && SETTINGS.showHistory;
     var wantIncidents = show === "all" || show === "incidents";
     var wantMaint = show === "all" || show === "maintenance";
@@ -443,6 +467,7 @@
     // Sort everything into active and past.
     var activeIncidents = [], pastIncidents = [];
     allIncidents().forEach(function (i) {
+      if (!matchesService(i, service)) return;
       var s = incidentStatus(i);
       (s === "resolved" ? pastIncidents : activeIncidents).push({ item: i, status: s });
     });
@@ -452,6 +477,7 @@
 
     var upcomingMaint = [], runningMaint = [], pastMaint = [];
     allMaintenances().forEach(function (m) {
+      if (!matchesService(m, service)) return;
       var s = maintenanceStatus(m, now);
       var entry = { item: m, status: s };
       if (s === "completed") pastMaint.push(entry);
@@ -533,9 +559,11 @@
 
   // ---- Read-only API for other pages ----------------------------------
   //
-  //   SiteStatus.activeIncident()      newest unresolved incident, or null
-  //   SiteStatus.currentMaintenance()  maintenance in progress, otherwise the
-  //                                    next scheduled one, or null
+  //   SiteStatus.activeIncident(svc)      newest unresolved incident, or null
+  //   SiteStatus.currentMaintenance(svc)  maintenance in progress, otherwise the
+  //                                       next scheduled one, or null
+  //                                       (svc is an optional service id)
+  //   SiteStatus.serviceName(id)          e.g. "tv" -> "Felix TV"
   //   SiteStatus.subscribe(fn)         runs fn now and again every minute
   //   SiteStatus.labels                the status names shown on the pages
 
@@ -546,9 +574,10 @@
   var feedState = SETTINGS.feedUrl ? "unavailable" : "off";
   var ready = !SETTINGS.feedUrl;
 
-  function activeIncident() {
+  function activeIncident(service) {
     var open = [];
     allIncidents().forEach(function (i) {
+      if (!matchesService(i, service)) return;
       var s = incidentStatus(i);
       if (s !== "resolved") open.push({ item: i, status: s });
     });
@@ -568,10 +597,11 @@
     };
   }
 
-  function currentMaintenance() {
+  function currentMaintenance(service) {
     var now = Date.now();
     var running = [], upcoming = [];
     allMaintenances().forEach(function (m) {
+      if (!matchesService(m, service)) return;
       var s = maintenanceStatus(m, now);
       if (s === "in-progress") running.push({ item: m, status: s });
       else if (s === "scheduled") upcoming.push({ item: m, status: s });
@@ -601,6 +631,7 @@
 
   window.SiteStatus = {
     labels: LABELS,
+    serviceName: serviceName,
     activeIncident: activeIncident,
     currentMaintenance: currentMaintenance,
     feedState: function () { return feedState; },
@@ -635,6 +666,7 @@
   function applyFeed(feed) {
     live.incidents = feed && Array.isArray(feed.incidents) ? feed.incidents : [];
     live.maintenances = feed && Array.isArray(feed.maintenances) ? feed.maintenances : [];
+    live.services = feed && Array.isArray(feed.services) ? feed.services : [];
   }
 
   function fetchFeed() {
