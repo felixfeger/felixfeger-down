@@ -57,7 +57,7 @@
     // Address of your status Worker's public feed, for example
     // "https://status-api.felixfeger.com/api/status". Leave it empty to use
     // only the hand-written lists below.
-    feedUrl: "",
+    feedUrl: "https://status-api.felixfeger.com",
 
     // How long to wait for the feed before showing what we have.
     feedTimeoutMs: 4000
